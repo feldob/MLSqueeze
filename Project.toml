@@ -1,0 +1,19 @@
+name = "MLSqueeze"
+uuid = "d32b21f8-1993-45c0-90cb-4a3803952375"
+authors = ["Felix Dobslaw <felix.dobslaw@miun.se>"]
+version = "0.1.0"
+
+[deps]
+BlackBoxOptim = "a134a8b2-14d6-55f6-9291-3336d3ab0209"
+CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
+Combinatorics = "861a8166-3701-5b0c-9a16-15d98fcdc6aa"
+DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+DecisionTree = "7806a523-6efd-50cb-b5f6-3fa6f1930dbb"
+Distances = "b4f34e82-e78d-54a5-968a-f98e89d6e8f7"
+HNSW = "540f64fa-c57e-11e8-081c-41422cda4629"
+MLJ = "add582a8-e3ab-11e8-2d5e-e98b27df1bc7"
+MLJDecisionTreeInterface = "c6f25543-311c-4c74-83dc-3ea6d1015661"
+Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
+StatsPlots = "f3b207a7-027a-5e70-b257-86293d7955fd"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
