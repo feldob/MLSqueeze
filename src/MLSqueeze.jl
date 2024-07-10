@@ -43,6 +43,8 @@ export
         isminimal,
         apply,
         todataframe,
+        AllVsAll,
+        OneVsAll,
 
         two_nearest_neighbor_distances,
         two_nearest_neighbor_distances_stats,

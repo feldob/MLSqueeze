@@ -15,11 +15,15 @@ end
 @testset "one vs all exposer" begin
     td = TrainingData(bmi_classification; ranges=BMI_RANGES)
     be = BoundaryExposer(td, bmi_classification, BoundarySqueeze(BMI_RANGES))
-    candidates = apply(be; iterations=10, initial_candidates=5, one_vs_all=true)
+    candidates = apply(be; iterations=10, initial_candidates=5, strategy=OneVsAll("Obese"))
     df = todataframe(candidates, bmi_classification)
+end
 
-    # TODO add some real tests
-    @test true
+@testset "all vs all exposer" begin
+    td = TrainingData(bmi_classification; ranges=BMI_RANGES)
+    be = BoundaryExposer(td, bmi_classification, BoundarySqueeze(BMI_RANGES))
+    candidates = apply(be; iterations=10, initial_candidates=5, strategy=AllVsAll())
+    df = todataframe(candidates, bmi_classification)
 end
 
 @testset "iris classifier test" begin
@@ -37,7 +41,7 @@ end
     # create a model that can be used for classification
     modelsut = getmodelsut(td; model=DecisionTree.DecisionTreeClassifier(max_depth=3), fit=DecisionTree.fit!)
     be = BoundaryExposer(td, modelsut)
-    candidates = apply(be; iterations=10, initial_candidates=5, one_vs_all=false)
+    candidates = apply(be; iterations=10, initial_candidates=5)
     df = todataframe(candidates, modelsut; output)
 
     plots(df, MLSqueeze.ranges(td); output)    
@@ -66,7 +70,7 @@ end
     modelsut = getmodelsut(td; model=DecisionTree.DecisionTreeClassifier(max_depth=3), fit=DecisionTree.fit!)
     be = BoundaryExposer(td, modelsut)
 
-    candidates = apply(be; iterations=10, initial_candidates=5, one_vs_all=false)
+    candidates = apply(be; iterations=10, initial_candidates=5)
     df = todataframe(candidates, modelsut; output)
 
     plots(df, MLSqueeze.ranges(td); output)

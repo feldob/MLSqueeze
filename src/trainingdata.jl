@@ -1,8 +1,13 @@
 #TODO can't handle missing data yet
 
-function assertdataframe(df::DataFrame; inputs, output)
+function assertdataframe(df::DataFrame; inputs::Vector{Symbol}, output::Symbol)
     @assert !isempty(df) "training data frame is empty"
-    @assert all(map(i -> i ∈ names(df), string.(inputs))) "the inputs $inputs must all exist in $(names(df))"
+    @assert string(output) ∈ names(df) "the output column $output does not exist in the dataframe."
+    for input_id in string.(inputs)
+        @assert input_id ∈ names(df) "the input $input_id does not exist in the dataframe: $(names(df))"
+        @assert eltype(df[:, input_id]) <: AbstractFloat "the optimizer requires float ranges for all inputs in the optimization, but $input_id is of type $(eltype(df[:, input_id]))."
+    end
+
     @assert ncol(df) ≥ 2 "there must be a class and at least one feature"
     return df
 end

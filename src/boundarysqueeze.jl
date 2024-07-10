@@ -18,12 +18,11 @@ function pd(i1, i2, o1, o2;
     end
 end
 
-nargs(f::Function) = length(methods(f).ms[1].sig.parameters)-1
-
 function pd_fitness(_classifier::Function; dist_output = isdifferent, dist_input = Euclidean())
     return (x::Vector{Float64}) -> begin
-        i1 = x[1:nargs(_classifier)]
-        i2 = x[(nargs(_classifier)+1):end]
+        _nargs = div(length(x),2)
+        i1 = x[1:_nargs]
+        i2 = x[_nargs+1:end]
         o1 = _classifier(i1...)
         o2 = _classifier(i2...)
         pd(i1, i2, o1, o2; dist_output, dist_input)

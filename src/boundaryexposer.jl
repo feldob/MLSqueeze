@@ -13,6 +13,7 @@ struct BoundaryExposer
     end
 end
 
+
 sut(be::BoundaryExposer) = be.sut
 isminimal(be::BoundaryExposer, bc::BoundaryCandidate) = isminimal(be.bs, bc)
 unique_outputs(be::BoundaryExposer) = unique_outputs(be.td)
@@ -25,16 +26,55 @@ function getcandidate(df, inputs::Vector{Symbol})
     return collect(df[idx,inputs])
 end
 
-function apply_one_vs_all(be::BoundaryExposer; MaxTime::Int,
-                                                iterations::Int,
-                                                initial_candidates::Int)
+abstract type SqueezeStrategy end
+
+struct RegularSqueeze <: SqueezeStrategy end
+struct AllVsAll <: SqueezeStrategy end
+struct OneVsAll <: SqueezeStrategy
+    onevalue
+end
+
+one(s::OneVsAll) = s.onevalue
+
+function oneify(sut::Function, one)
+    return (x...) -> begin
+        res = sut(x...)
+        if res != one
+            res = "other"
+        end
+        return res
+    end
+end
+
+function apply_one_vs_all(be::BoundaryExposer, one; MaxTime,
+                                                        iterations,
+                                                        initial_candidates,
+                                                        dist_output,
+                                                        optimizefordiversity,
+                                                        add_new)
+
+    df_uo = deepcopy(be.td.df)
+    df_uo.tempoutput = map(o -> o == one ? one : "other", df_uo[:, outputcol(be)])
+    td = TrainingData(sutname(be.td), df_uo; inputs = inputcols(be), output=:tempoutput)
+    temp_be = BoundaryExposer(td, oneify(sut(be), one))
+    return apply(temp_be; MaxTime, dist_output, iterations, initial_candidates, optimizefordiversity, add_new)
+end
+
+function apply_all_vs_all(be::BoundaryExposer; MaxTime,
+                                                iterations,
+                                                initial_candidates,
+                                                dist_output,
+                                                optimizefordiversity,
+                                                add_new)
+
     cands = BoundaryCandidate[]
     for uo in unique_outputs(be)
         df_uo = deepcopy(be.td.df)
         df_uo.tempoutput = map(o -> o == uo ? uo : "other", df_uo[:, outputcol(be)])
         td = TrainingData(sutname(be.td), df_uo; inputs = inputcols(be), output=:tempoutput)
-        temp_be = BoundaryExposer(td, be.sut)
-        newcands = apply(temp_be; MaxTime, iterations, initial_candidates)
+        temp_be = BoundaryExposer(td, oneify(sut(be), uo))
+        @assert length(unique(df_uo[:, outputcol(temp_be)])) == 2 "wrong number of inputs: $(unique(df_uo[:, outputcol(temp_be)]))"
+        newcands = apply(temp_be; MaxTime, dist_output, iterations, initial_candidates, optimizefordiversity, add_new)
         cands = vcat(cands, newcands)
     end
 
@@ -45,11 +85,13 @@ function apply(be::BoundaryExposer; MaxTime=3::Int,
                                     iterations::Int=500,
                                     initial_candidates::Int=20,
                                     dist_output = isdifferent,
-                                    one_vs_all::Bool=false,
+                                    strategy::SqueezeStrategy=RegularSqueeze(),
                                     optimizefordiversity::Bool=true,
                                     add_new::Bool=true)
-    if one_vs_all
-        return apply_one_vs_all(be; MaxTime, iterations, initial_candidates)
+    if strategy isa AllVsAll
+        return apply_all_vs_all(be; MaxTime, iterations, initial_candidates, dist_output, optimizefordiversity, add_new)
+    elseif strategy isa OneVsAll
+        return apply_one_vs_all(be, one(strategy); MaxTime, iterations, initial_candidates, dist_output, optimizefordiversity, add_new)
     end
 
     cands = BoundaryCandidate[]
