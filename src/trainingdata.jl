@@ -1,11 +1,11 @@
-#TODO can't handle missing data yet
-
 function assertdataframe(df::DataFrame; inputs::Vector{Symbol}, output::Symbol)
     @assert !isempty(df) "training data frame is empty"
     @assert string(output) ∈ names(df) "the output column $output does not exist in the dataframe."
     for input_id in string.(inputs)
+        input_col = df[!, input_id]
+        @assert !any(ismissing, input_col) "input $input_id contains missing values which cannot be handled by MLSqueeze."
         @assert input_id ∈ names(df) "the input $input_id does not exist in the dataframe: $(names(df))"
-        @assert eltype(df[:, input_id]) <: AbstractFloat "the optimizer requires float ranges for all inputs in the optimization, but $input_id is of type $(eltype(df[:, input_id]))."
+        @assert eltype(input_col) <: AbstractFloat "the optimizer requires float ranges for all inputs in the optimization, but $input_id is of type $(eltype(df[!, input_id]))."
     end
 
     @assert ncol(df) ≥ 2 "there must be a class and at least one feature"
@@ -32,7 +32,6 @@ end
 
 defaultinputs(df::DataFrame) = Symbol.(names(df)[1:end-1])
 
-#TODO in first iteration only numbers as inputs that allow random sampling.
 struct TrainingData
     sutname::String
     df::DataFrame

@@ -18,14 +18,33 @@ function pd(i1, i2, o1, o2;
     end
 end
 
-function pd_fitness(_classifier::Function; dist_output = isdifferent, dist_input = Euclidean())
+# count of 1s must be exactly 1
+
+function repair(x::Vector{Float64}, categorical_ranges::Vector{UnitRange{Int64}})
+    if isempty(categorical_ranges)
+        return x
+    end
+
+    x_copy = copy(x)
+    for range in categorical_ranges
+        x_copy[range] = zeros(length(range))
+        x_copy[argmax(x[range])] = 1.0
+    end
+    return x_copy
+end
+
+function pd_fitness(_classifier::Function; dist_output = isdifferent,
+                                            dist_input = Euclidean(),
+                                            categorical_ranges = UnitRange{Int64}[])
     return (x::Vector{Float64}) -> begin
         _nargs = div(length(x),2)
         i1 = x[1:_nargs]
         i2 = x[_nargs+1:end]
+        # i1_copy = repair(i1, categorical_ranges)
+        # i2_copy = repair(i2, categorical_ranges)
         o1 = _classifier(i1...)
         o2 = _classifier(i2...)
-        pd(i1, i2, o1, o2; dist_output, dist_input)
+        return pd(i1, i2, o1, o2; dist_output, dist_input)
     end
 end
 
@@ -89,18 +108,25 @@ function convergence_callback(bs::BoundarySqueeze)
     end
 end
 
-# TODO create test case
-function trivialpopulation(bs::BoundarySqueeze, cand1, cand2)
+function trivialpopulation(bs::BoundarySqueeze, cand1, cand2, categorical_ranges)
     seed = vcat(cand1, cand2)
     
     ncandinputs = length(cand1) * 2 # always same length
 
     _delta = vcat(delta(bs), delta(bs))
+
     # TODO must do the boxing - ensure in range
     pop = Matrix{Float64}(undef, ncandinputs, npoints(bs)-1)
     for i in 1:(npoints(bs)-1)
         pop[:, i] = seed .+ (rand(ncandinputs) .- 0.5) .* 2 .* _delta # introduce some random noise
     end
+
+    # correct categorical entries (TODO no clue how exactly - want them to be close, but how does that represent current?)
+    # cat_cols = vcat(categorical_ranges...)
+    # cat_cols = vcat(cat_cols, length(cat_cols) .+ cat_cols)
+    # for cat_col in cat_cols
+    #     pop[cat_col,!] = .5
+    # end
 
     return convert(Matrix{Float64}, [pop seed])
 end
@@ -110,11 +136,14 @@ sumcolwise(m::Metric) = (a,b) -> sum(colwise(m, a, b))
 function apply(bs::BoundarySqueeze, sut::Function, cand1, cand2;
                                                         MaxTime=3::Int,
                                                         dist_output = isdifferent,
-                                                        dist_input = sumcolwise(Euclidean()))
-    Population = trivialpopulation(bs, cand1, cand2)
-    # create ranges with margins (TODO for non-floats this makes no sense)
+                                                        dist_input = sumcolwise(Euclidean()),
+                                                        categorical_ranges = UnitRange{Int64}[])
+    Population = trivialpopulation(bs, cand1, cand2, categorical_ranges)
+
+    # create ranges with margins
     _ranges = map(e -> (e[2][1]-delta(bs)[e[1]],e[2][2]+delta(bs)[e[1]]), enumerate(ranges(bs)))
-    res = bboptimize(pd_fitness(sut; dist_output, dist_input); SearchRange = vcat(_ranges, _ranges),
+    res = bboptimize(pd_fitness(sut; dist_output, dist_input, categorical_ranges);
+                                SearchRange = vcat(_ranges, _ranges),
                                 CallbackInterval = 0.0,
                                 CallbackFunction = convergence_callback(bs),
                                 MaxTime, Population)

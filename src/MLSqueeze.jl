@@ -20,6 +20,9 @@ export
         synth_func,
         check_synth_valid,
 
+        onehotdimensions,
+        onehotencoding!,
+
         defaultranges,
         TrainingData,
         deriveranges,
@@ -49,11 +52,13 @@ export
         two_nearest_neighbor_distances,
         two_nearest_neighbor_distances_stats,
 
-        BoundaryExposer
+        BoundaryExposer,
+        categoricalranges
 
 include("suts/bmi.jl")
 include("suts/synth.jl")
 include("suts/classifier.jl")
+include("onehot.jl")
 include("trainingdata.jl")
 include("boundarysqueeze.jl")
 include("boundaryexposer.jl")

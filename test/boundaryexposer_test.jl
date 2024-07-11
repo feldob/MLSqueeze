@@ -44,34 +44,38 @@ end
     candidates = apply(be; iterations=10, initial_candidates=5)
     df = todataframe(candidates, modelsut; output)
 
-    plots(df, MLSqueeze.ranges(td); output)    
+    plots(df, MLSqueeze.ranges(td); output)
 end
 
 @testset "classifier test (ordinal titanic)" begin
     df = CSV.read("../data/titanic.csv", DataFrame)
     
-    # TODO as far as missing handling not supported, filter out
+    # missing must be removed or handled otherwise
     # ------------
-    filter!(r -> !ismissing(r.Age), df)
+    dropmissing!(df)
     df.Age = convert(Vector{Float64}, df.Age)
-
-    filter!(r -> !ismissing(r.Pclass), df)
     df.Pclass = convert(Vector{Float64}, df.Pclass)
+    df.SibSp = convert(Vector{Float64}, df.SibSp)
+
+    onehotencoding!(df, :Embarked)
     # ------------
 
-    inputs = [:Pclass, :Age]
+    inputs = [:Pclass, :Age, :SibSp] ∪ onehotdimensions(df, :Embarked)
     output = :Survived
-    
+
     ranges = deriveranges(df, inputs)
 
     td = TrainingData("titanic", df; inputs, output)
 
-    # TODO do even for categorical, such as :Sex (setup another test)
     modelsut = getmodelsut(td; model=DecisionTree.DecisionTreeClassifier(max_depth=3), fit=DecisionTree.fit!)
-    be = BoundaryExposer(td, modelsut)
+    be = BoundaryExposer(td, modelsut; categoricals=[:Embarked])
 
     candidates = apply(be; iterations=10, initial_candidates=5)
-    df = todataframe(candidates, modelsut; output)
+    df = todataframe(candidates, modelsut; output, categoricals=[:Embarked])
+
+    for i in 1:nrow(df)
+        @test df[i, :Survived] != df[i, :n_Survived]
+    end
 
     plots(df, MLSqueeze.ranges(td); output)
 end

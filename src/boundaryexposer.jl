@@ -1,18 +1,34 @@
+# assumes that the categories for a onehot encoding are consecutive
+function extractcategoricalranges(td::TrainingData, categoricals::Vector{Symbol})
+    if isempty(categoricals)
+        return UnitRange{Int64}[]
+    end
+
+    ranges = Vector{UnitRange{Int64}}(undef, length(categoricals))
+    for i in eachindex(categoricals)
+        cat = string(categoricals[i])
+        inputs = string.(inputcols(td))
+        _first = findfirst(n -> startswith(n, cat), inputs)
+        _last = findlast(n -> startswith(n, cat), inputs)
+        ranges[i] = _first:_last
+    end
+
+    return ranges
+end
+
 struct BoundaryExposer
     td::TrainingData
     sut::Function
     bs::BoundarySqueeze
+    categorical_ranges::Vector{UnitRange{Int64}}
 
-    function BoundaryExposer(td::TrainingData, sut::Function, bs::BoundarySqueeze=BoundarySqueeze(td))
-        # ensure compatible input type (all inputs) for BlackBoxOptim
-        for ic in inputcols(td)
-            td.df[:, ic] = convert(Vector{Float64}, td.df[:, ic])
-        end
-
-        return new(td, sut, bs)
+    function BoundaryExposer(td::TrainingData,
+                                sut::Function,
+                                bs::BoundarySqueeze=BoundarySqueeze(td);
+                                categoricals::Vector{Symbol}=Symbol[])
+        return new(td, sut, bs, extractcategoricalranges(td, categoricals))
     end
 end
-
 
 sut(be::BoundaryExposer) = be.sut
 isminimal(be::BoundaryExposer, bc::BoundaryCandidate) = isminimal(be.bs, bc)
@@ -20,6 +36,7 @@ unique_outputs(be::BoundaryExposer) = unique_outputs(be.td)
 tdframe(be::BoundaryExposer) = be.td.df
 outputcol(be::BoundaryExposer) = outputcol(be.td)
 inputcols(be::BoundaryExposer) = inputcols(be.td)
+categoricalranges(be::BoundaryExposer) = be.categorical_ranges
 
 function getcandidate(df, inputs::Vector{Symbol})
     idx = rand(1:nrow(df))
@@ -54,7 +71,7 @@ function apply_one_vs_all(be::BoundaryExposer, one; MaxTime,
                                                         add_new)
 
     df_uo = deepcopy(be.td.df)
-    df_uo.tempoutput = map(o -> o == one ? one : "other", df_uo[:, outputcol(be)])
+    df_uo.tempoutput = map(o -> o == one ? one : "other", df_uo[!, outputcol(be)])
     td = TrainingData(sutname(be.td), df_uo; inputs = inputcols(be), output=:tempoutput)
     temp_be = BoundaryExposer(td, oneify(sut(be), one))
     return apply(temp_be; MaxTime, dist_output, iterations, initial_candidates, optimizefordiversity, add_new)
@@ -70,10 +87,10 @@ function apply_all_vs_all(be::BoundaryExposer; MaxTime,
     cands = BoundaryCandidate[]
     for uo in unique_outputs(be)
         df_uo = deepcopy(be.td.df)
-        df_uo.tempoutput = map(o -> o == uo ? uo : "other", df_uo[:, outputcol(be)])
+        df_uo.tempoutput = map(o -> o == uo ? uo : "other", df_uo[!, outputcol(be)])
         td = TrainingData(sutname(be.td), df_uo; inputs = inputcols(be), output=:tempoutput)
         temp_be = BoundaryExposer(td, oneify(sut(be), uo))
-        @assert length(unique(df_uo[:, outputcol(temp_be)])) == 2 "wrong number of inputs: $(unique(df_uo[:, outputcol(temp_be)]))"
+        @assert length(unique(df_uo[!, outputcol(temp_be)])) == 2 "wrong number of inputs: $(unique(df_uo[!, outputcol(temp_be)]))"
         newcands = apply(temp_be; MaxTime, dist_output, iterations, initial_candidates, optimizefordiversity, add_new)
         cands = vcat(cands, newcands)
     end
@@ -105,7 +122,8 @@ function apply(be::BoundaryExposer; MaxTime=3::Int,
         first, second = sample(1:length(gfs), 2; replace = false)
         init1 = getcandidate(gfs[first], inputs)
         init2 = getcandidate(gfs[second], inputs)
-        cand = apply(be.bs, sut(be), init1, init2; MaxTime, dist_output)
+        categorical_ranges = categoricalranges(be)
+        cand = apply(be.bs, sut(be), init1, init2; MaxTime, dist_output, categorical_ranges)
         
         #TODO have a check for whether the search was successful... if points too far apart, not successf. also interesting - what are those cases? -> investigate.
         if !optimizefordiversity || length(cands) < initial_candidates + 1
@@ -148,7 +166,10 @@ function swap_order!(r::DataFrameRow)
     r[(clength+1):end] = r_copy[1:clength]
 end
 
-function todataframe(candidates::AbstractVector{BoundaryCandidate}, sut::Function; output = :output)
+function todataframe(candidates::AbstractVector{BoundaryCandidate},
+                                    sut::Function;
+                                    output = :output,
+                                    categoricals=Symbol[])
 
     df_left = DataFrame()
     for (i, n) in enumerate(argnames(sut))
@@ -174,6 +195,9 @@ function todataframe(candidates::AbstractVector{BoundaryCandidate}, sut::Functio
             swap_order!(r)
        end
     end
+
+    # revert onehotencoding
+    foreach(c -> undoonehotencoding!(df_left, c), categoricals)
 
     return df_left
 end
@@ -217,9 +241,8 @@ function plots(df::DataFrame, limits; output=:output)
     return plts
 end
 
-
 function two_nearest_neighbor_distances(df::DataFrame, inputs::Vector{Symbol})
-    d = pairwise(Euclidean(), Matrix(df[:, inputs])')
+    d = pairwise(Euclidean(), Matrix(df[!, inputs])')
     return sort!(d, dims=2)[:, 2:3]
 end
 
