@@ -150,6 +150,7 @@ function apply(be::BoundaryExposer; MaxTime=3::Int,
             removenext = argmin(neighbordistancesums) # remove closest to its two neighbor points (2d boundary has 2 neighbor points)
         end
         "************ $i" |> println
+        "*** -> fitness: $incumbent_diversity_diff" |> println
     end
 
     if optimizefordiversity && doremovenext

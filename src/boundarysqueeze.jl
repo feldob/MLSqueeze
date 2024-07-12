@@ -97,12 +97,12 @@ function convergence_callback(bs::BoundarySqueeze)
         if best_fitness(c) < Inf # valid pair (boundary has candidate on two sides of the boundary)
             
             if isminimal(bs, bc)
-                    c.max_steps = BlackBoxOptim.num_steps(c)-1
-                    println("--------")
-                    println(c.max_steps)
-                    println(best_fitness(c))
-                    println(bc)
-                    println("--------")
+                c.max_steps = BlackBoxOptim.num_steps(c)-1
+                # println("--------")
+                # println(c.max_steps)
+                # println(best_fitness(c))
+                # println(bc)
+                # println("--------")
             end
         end
     end
@@ -146,7 +146,7 @@ function apply(bs::BoundarySqueeze, sut::Function, cand1, cand2;
                                 SearchRange = vcat(_ranges, _ranges),
                                 CallbackInterval = 0.0,
                                 CallbackFunction = convergence_callback(bs),
-                                MaxTime, Population)
+                                MaxTime, Population, TraceMode = :silent)
 
     return BoundaryCandidate(best_candidate(res))
 end
