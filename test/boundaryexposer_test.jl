@@ -70,7 +70,7 @@ end
     modelsut = getmodelsut(td; model=DecisionTree.DecisionTreeClassifier(max_depth=3), fit=DecisionTree.fit!)
     be = BoundaryExposer(td, modelsut; categoricals=[:Embarked])
 
-    candidates = apply(be; iterations=10, initial_candidates=5)
+    candidates = apply(be; timelimit=1, initial_candidates=5)
     df = todataframe(candidates, modelsut; output, categoricals=[:Embarked])
 
     for i in 1:nrow(df)

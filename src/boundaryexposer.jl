@@ -63,59 +63,41 @@ function oneify(sut::Function, one)
     end
 end
 
-function apply_one_vs_all(be::BoundaryExposer, one; MaxTime,
-                                                        iterations,
-                                                        initial_candidates,
-                                                        dist_output,
-                                                        optimizefordiversity,
-                                                        add_new)
-
-    df_uo = deepcopy(be.td.df)
-    df_uo.tempoutput = map(o -> o == one ? one : "other", df_uo[!, outputcol(be)])
-    td = TrainingData(sutname(be.td), df_uo; inputs = inputcols(be), output=:tempoutput)
-    temp_be = BoundaryExposer(td, oneify(sut(be), one))
-    return apply(temp_be; MaxTime, dist_output, iterations, initial_candidates, optimizefordiversity, add_new)
-end
-
-function apply_all_vs_all(be::BoundaryExposer; MaxTime,
-                                                iterations,
-                                                initial_candidates,
-                                                dist_output,
-                                                optimizefordiversity,
-                                                add_new)
-
-    cands = BoundaryCandidate[]
-    for uo in unique_outputs(be)
-        df_uo = deepcopy(be.td.df)
-        df_uo.tempoutput = map(o -> o == uo ? uo : "other", df_uo[!, outputcol(be)])
-        td = TrainingData(sutname(be.td), df_uo; inputs = inputcols(be), output=:tempoutput)
-        temp_be = BoundaryExposer(td, oneify(sut(be), uo))
-        @assert length(unique(df_uo[!, outputcol(temp_be)])) == 2 "wrong number of inputs: $(unique(df_uo[!, outputcol(temp_be)]))"
-        newcands = apply(temp_be; MaxTime, dist_output, iterations, initial_candidates, optimizefordiversity, add_new)
-        cands = vcat(cands, newcands)
-    end
-
-    return cands
-end
-
 function apply(be::BoundaryExposer; MaxTime=3::Int,
                                     iterations::Int=500,
+                                    timelimit::Int=0,
                                     initial_candidates::Int=20,
                                     dist_output = isdifferent,
                                     strategy::SqueezeStrategy=RegularSqueeze(),
                                     optimizefordiversity::Bool=true,
                                     add_new::Bool=true)
-    if strategy isa AllVsAll
-        return apply_all_vs_all(be; MaxTime, iterations, initial_candidates, dist_output, optimizefordiversity, add_new)
-    elseif strategy isa OneVsAll
-        return apply_one_vs_all(be, one(strategy); MaxTime, iterations, initial_candidates, dist_output, optimizefordiversity, add_new)
+    if timelimit > 0
+        iterations = typemax(Int)
     end
 
+    if strategy isa AllVsAll
+        return apply_all_vs_all(be; MaxTime, iterations, timelimit, initial_candidates, dist_output, optimizefordiversity, add_new)
+    elseif strategy isa OneVsAll
+        return apply_one_vs_all(be, one(strategy); MaxTime, iterations, timelimit, initial_candidates, dist_output, optimizefordiversity, add_new)
+    else
+        return apply_direct(be; MaxTime, iterations, timelimit, initial_candidates, dist_output, optimizefordiversity, add_new)
+    end
+end
+
+function apply_direct(be::BoundaryExposer; MaxTime,
+                                            iterations,
+                                            timelimit,
+                                            initial_candidates,
+                                            dist_output,
+                                            optimizefordiversity,
+                                            add_new)
     cands = BoundaryCandidate[]
     removenext = 1
     doremovenext = true
     incumbent_diversity_diff = 0
     inputs = inputcols(be)
+
+    start = now()
 
     gfs = groupby(tdframe(be), outputcol(be))
     for i in 1:iterations
@@ -148,6 +130,9 @@ function apply(be::BoundaryExposer; MaxTime=3::Int,
             end
 
             removenext = argmin(neighbordistancesums) # remove closest to its two neighbor points (2d boundary has 2 neighbor points)
+            if timelimit > 0 && now() - start > Millisecond(timelimit * 1000)
+                break
+            end
         end
         "************ $i" |> println
         "*** -> fitness: $incumbent_diversity_diff" |> println
@@ -155,6 +140,44 @@ function apply(be::BoundaryExposer; MaxTime=3::Int,
 
     if optimizefordiversity && doremovenext
         cands = cands[setdiff(1:end, removenext)] # ensure that the very last "removenext" is respected
+    end
+
+    return cands
+end
+
+function apply_one_vs_all(be::BoundaryExposer, one; MaxTime,
+                                                        iterations,
+                                                        timelimit,
+                                                        initial_candidates,
+                                                        dist_output,
+                                                        optimizefordiversity,
+                                                        add_new)
+
+    df_uo = deepcopy(be.td.df)
+    df_uo.tempoutput = map(o -> o == one ? one : "other", df_uo[!, outputcol(be)])
+    td = TrainingData(sutname(be.td), df_uo; inputs = inputcols(be), output=:tempoutput)
+    temp_be = BoundaryExposer(td, oneify(sut(be), one))
+    return apply_direct(temp_be; MaxTime, dist_output, iterations, timelimit, initial_candidates, optimizefordiversity, add_new)
+end
+
+function apply_all_vs_all(be::BoundaryExposer; MaxTime,
+                                                iterations,
+                                                timelimit,
+                                                initial_candidates,
+                                                dist_output,
+                                                optimizefordiversity,
+                                                add_new)
+
+    timelimit = timelimit == 0 ? timelimit : div(timelimit, length(unique_outputs(be)))
+    cands = BoundaryCandidate[]
+    for uo in unique_outputs(be)
+        df_uo = deepcopy(be.td.df)
+        df_uo.tempoutput = map(o -> o == uo ? uo : "other", df_uo[!, outputcol(be)])
+        td = TrainingData(sutname(be.td), df_uo; inputs = inputcols(be), output=:tempoutput)
+        temp_be = BoundaryExposer(td, oneify(sut(be), uo))
+        @assert length(unique(df_uo[!, outputcol(temp_be)])) == 2 "wrong number of inputs: $(unique(df_uo[!, outputcol(temp_be)]))"
+        newcands = apply_direct(temp_be; MaxTime, dist_output, iterations, timelimit, initial_candidates, optimizefordiversity, add_new)
+        cands = vcat(cands, newcands)
     end
 
     return cands
